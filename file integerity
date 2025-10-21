@@ -1,0 +1,117 @@
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import hashlib
+import os
+
+HASH_FILE = "hash_store.txt"
+
+# --- Functions ---
+
+def compute_sha3(file_path):
+    """Compute SHA3-256 hash of a file"""
+    sha3 = hashlib.sha3_256()
+    try:
+        with open(file_path, 'rb') as f:
+            while chunk := f.read(4096):
+                sha3.update(chunk)
+        return sha3.hexdigest()
+    except FileNotFoundError:
+        return None
+
+def save_hash():
+    """Save the hash of selected files (single or multiple)"""
+    file_paths = filedialog.askopenfilenames(title="Select File(s) to Hash")
+    if not file_paths:
+        return
+
+    saved_files = []
+    for file_path in file_paths:
+        file_hash = compute_sha3(file_path)
+        if file_hash:
+            with open(HASH_FILE, 'a') as f:
+                f.write(f"{file_path}::{file_hash}\n")
+            saved_files.append(f"{os.path.basename(file_path)}:\n{file_hash}")
+    
+    if saved_files:
+        messagebox.showinfo("Hashes Saved", "Hashes saved successfully:\n\n" + "\n\n".join(saved_files))
+    else:
+        messagebox.showerror("Error", "No files saved.")
+
+def verify_file():
+    """Verify the integrity of a selected file"""
+    file_path = filedialog.askopenfilename(title="Select File to Verify")
+    if not file_path:
+        return
+
+    file_hash = compute_sha3(file_path)
+    if not file_hash:
+        messagebox.showerror("Error", "File not found!")
+        return
+
+    if not os.path.exists(HASH_FILE):
+        messagebox.showerror("Error", "No hash records found.")
+        return
+
+    with open(HASH_FILE, 'r') as f:
+        for line in f:
+            stored_file, stored_hash = line.strip().split("::")
+            if stored_file == file_path:
+                if stored_hash == file_hash:
+                    show_verification_result(file_path, file_hash, True)
+                    return
+                else:
+                    show_verification_result(file_path, file_hash, False)
+                    return
+    messagebox.showinfo("Integrity Check", f"No hash record for:\n{file_path}")
+
+def check_all_files():
+    """Verify all files in hash_store.txt"""
+    if not os.path.exists(HASH_FILE):
+        messagebox.showerror("Error", "No hash records found.")
+        return
+
+    results = []
+    with open(HASH_FILE, 'r') as f:
+        for line in f:
+            stored_file, stored_hash = line.strip().split("::")
+            file_hash = compute_sha3(stored_file)
+            if file_hash == stored_hash:
+                results.append(f"{os.path.basename(stored_file)} ✅ Intact")
+            else:
+                results.append(f"{os.path.basename(stored_file)} ❌ Tampered or missing")
+    
+    messagebox.showinfo("Bulk Integrity Check", "\n".join(results))
+
+def show_verification_result(file_path, file_hash, intact):
+    """Show verification result in a styled popup"""
+    result_window = tk.Toplevel(root)
+    result_window.title("Verification Result")
+    result_window.geometry("500x200")
+    result_window.resizable(False, False)
+
+    status_text = "File is intact ✅" if intact else "File has been tampered ❌"
+    status_color = "green" if intact else "red"
+
+    ttk.Label(result_window, text=os.path.basename(file_path), font=("Arial", 14, "bold")).pack(pady=10)
+    ttk.Label(result_window, text=f"SHA3-256: {file_hash}", font=("Courier", 10), wraplength=480).pack(pady=5)
+    ttk.Label(result_window, text=status_text, font=("Arial", 14, "bold"), foreground=status_color).pack(pady=10)
+    ttk.Button(result_window, text="Close", command=result_window.destroy).pack(pady=10)
+
+# --- GUI Setup ---
+root = tk.Tk()
+root.title("Secure File Integrity Verification (SHA-3)")
+root.geometry("550x350")
+root.resizable(False, False)
+
+style = ttk.Style()
+style.configure("TButton", font=("Arial", 12))
+style.configure("TLabel", font=("Arial", 12))
+
+ttk.Label(root, text="Secure File Integrity Verification", font=("Arial", 16, "bold")).pack(pady=20)
+
+ttk.Button(root, text="Save File Hash", width=30, command=save_hash).pack(pady=10)
+ttk.Button(root, text="Verify File Integrity", width=30, command=verify_file).pack(pady=10)
+ttk.Button(root, text="Check All Files", width=30, command=check_all_files).pack(pady=10)
+ttk.Button(root, text="Exit", width=30, command=root.destroy).pack(pady=10)
+
+root.mainloop()
